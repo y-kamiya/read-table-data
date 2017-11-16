@@ -1,8 +1,6 @@
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
 
-using namespace cv;
-
 int main(int argc, char** argv )
 {
     if ( argc != 2 )
@@ -10,15 +8,20 @@ int main(int argc, char** argv )
         printf("usage: DisplayImage.out <Image_Path>\n");
         return -1;
     }
-    Mat image;
-    image = imread( argv[1], 1 );
+
+    auto imageName = argv[1];
+    auto image = cv::imread(imageName, 0);
     if ( !image.data )
     {
         printf("No image data \n");
         return -1;
     }
-    namedWindow("Display Image", WINDOW_AUTOSIZE );
-    imshow("Display Image", image);
-    waitKey(0);
+
+    cv::Mat bw;
+    cv::adaptiveThreshold(~image, bw, 255, CV_ADAPTIVE_THRESH_GAUSSIAN_C, cv::THRESH_BINARY, 15, -2);
+
+    cv::namedWindow("Display Image", cv::WINDOW_AUTOSIZE );
+    cv::imshow("Display Image", bw);
+    cv::waitKey(0);
     return 0;
 }
