@@ -87,11 +87,7 @@ int main(int argc, char** argv )
     auto horizontal = getHorizontalMask(imageBinary);
     auto vertical = getVerticalMask(imageBinary);
 
-    cv::Mat joints;
-    bitwise_and(horizontal, vertical, joints);
-    cv::imshow("joints", joints);
-
-    auto mask = horizontal + vertical;
+    cv::Mat mask = horizontal + vertical;
     std::vector<cv::Vec2f> lines;
     cv::HoughLines(mask, lines, 1, 3.14/180, 200);
 
@@ -101,9 +97,14 @@ int main(int argc, char** argv )
     // for (auto &line : lines) {
     // }
 
+    auto imageH = image.clone();
+    imageH.setTo(cv::Scalar(0,0,0));
+    auto imageV = image.clone();
+    imageV.setTo(cv::Scalar(0,0,0));
+
     auto z = 1000;
     for (auto &line : lines) {
-        printf("%f, %f\n", line[0], line[1]);
+        // printf("%f, %f\n", line[0], line[1]);
         auto rho = line[0];
         auto theta = line[1];
         auto ct = cos(theta);
@@ -111,35 +112,36 @@ int main(int argc, char** argv )
         auto start = cv::Point(rho * ct - z * st, rho * st + z * ct);
         auto end   = cv::Point(rho * ct + z * st, rho * st - z * ct);
         if (theta <= 0.1 || M_PI - 0.1 < theta) {
-            cv::line(imageResized, start, end, cv::Scalar(0,0,255));
+            cv::line(imageV, start, end, cv::Scalar(255,255,255));
         } else if (M_PI / 2 - 0.1 <= theta && theta <= M_PI / 2 + 0.1) {
-            cv::line(imageResized, start, end, cv::Scalar(255,0,0));
+            cv::line(imageH, start, end, cv::Scalar(255,255,255));
         }
     }
-    cv::imshow("mask", mask);
-    cv::imshow("image", imageResized);
-    cv::waitKey(0);
-    return 0;
 
+    cv::Mat joints;
+    bitwise_and(imageH, imageV, joints);
+    // cv::imshow("joints", joints);
 
-
+    cv::Mat imageMask = imageH + imageV;
+    cv::imshow("imageMask", imageMask);
 
 
 
     // Find external contours from the mask, which most probably will belong to tables or to images
     std::vector<cv::Vec4i> hierarchy;
     std::vector<std::vector<cv::Point> > contours;
-    cv::findContours(imageBinary, contours, hierarchy, CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
-    // cv::findContours(mask, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
-    for (auto contour = contours.begin(); contour != contours.end(); contour++){
-        cv::polylines(imageResized, *contour, true, cv::Scalar(0, 255, 0), 2);
-    }   
-    cv::imshow("imageResized", imageResized);
-    cv::imshow("imageBinary", imageBinary);
+    // cv::findContours(imageBinary, contours, hierarchy, CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
+    cv::findContours(imageMask, contours, hierarchy, CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
 
-    printf("%ld\n", contours.size());
-    cv::waitKey();
-    return 0;
+    // for (auto contour = contours.begin(); contour != contours.end(); contour++){
+    //     cv::polylines(imageResized, *contour, true, cv::Scalar(0, 255, 0), 2);
+    // }   
+    // cv::imshow("imageResized", imageResized);
+    // printf("%ld\n", contours.size());
+
+
+
+
     std::vector<std::vector<cv::Point> > contours_poly( contours.size() );
     std::vector<cv::Rect> boundRect( contours.size() );
     std::vector<cv::Mat> rois;
@@ -153,9 +155,11 @@ int main(int argc, char** argv )
         if(area < 100) // value is randomly chosen, you will need to find that by yourself with trial and error procedure
             continue;
 
-        approxPolyDP( cv::Mat(contours[i]), contours_poly[i], 3, true );
+        approxPolyDP( cv::Mat(contours[i]), contours_poly[i], 0.01 * cv::arcLength(contours[i], true), true );
         boundRect[i] = boundingRect( cv::Mat(contours_poly[i]) );
 
+        printf("%ld\n", contours_poly[i].size());
+        printf("%lf\n", area);
         // find the number of joints that each table has
         auto roi = joints(boundRect[i]);
 
@@ -169,7 +173,7 @@ int main(int argc, char** argv )
         rois.push_back(image(boundRect[i]).clone());
 
 //        drawContours( image, contours, i, Scalar(0, 0, 255), CV_FILLED, 8, std::vector<Vec4i>(), 0, Point() );
-        rectangle( image, boundRect[i].tl(), boundRect[i].br(), cv::Scalar(0, 255, 0), 1, 8, 0 );
+        rectangle( imageResized, boundRect[i].tl(), boundRect[i].br(), cv::Scalar(0, 255, 0), 1, 8, 0 );
     }
 
     std::cout << rois.size() << std::endl;
@@ -190,6 +194,7 @@ int main(int argc, char** argv )
     // cv::imshow("vertical", vertical);
     // cv::imshow("mask", mask);
     // cv::imshow("joints", joints);
+    cv::imshow("imageResized", imageResized);
     cv::waitKey(0);
     return 0;
 }
