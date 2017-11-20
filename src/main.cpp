@@ -136,8 +136,18 @@ int main(int argc, char** argv )
     // for (auto contour = contours.begin(); contour != contours.end(); contour++){
     //     cv::polylines(imageResized, *contour, true, cv::Scalar(0, 255, 0), 2);
     // }   
-    // cv::imshow("imageResized", imageResized);
     // printf("%ld\n", contours.size());
+    // for (size_t i = 0; i < contours.size(); i++) {
+    //     auto img = image.clone();
+    //     img.setTo(cv::Scalar(0,0,0));
+    //     cv::polylines(img, contours[i], true, cv::Scalar(255, 255, 255), 2);
+    //     cv::imshow("img", img);
+    //     cv::waitKey(0);
+    // }
+    //
+    // cv::imshow("imageResized", imageResized);
+    // cv::waitKey(0);
+    // return 0;
 
 
 
@@ -152,19 +162,27 @@ int main(int argc, char** argv )
         double area = contourArea(contours[i]);
 
 //        // filter individual lines of blobs that might exist and they do not represent a table
-        if(area < 100) // value is randomly chosen, you will need to find that by yourself with trial and error procedure
+        if(area < 50000 || 100000 < area) // value is randomly chosen, you will need to find that by yourself with trial and error procedure
             continue;
 
         approxPolyDP( cv::Mat(contours[i]), contours_poly[i], 0.01 * cv::arcLength(contours[i], true), true );
         boundRect[i] = boundingRect( cv::Mat(contours_poly[i]) );
 
-        printf("%ld\n", contours_poly[i].size());
+        // printf("%ld\n", contours_poly[i].size());
         printf("%lf\n", area);
         // find the number of joints that each table has
         auto roi = joints(boundRect[i]);
 
         std::vector<std::vector<cv::Point> > joints_contours;
         findContours(roi, joints_contours, cv::RETR_CCOMP, cv::CHAIN_APPROX_SIMPLE);
+
+        printf("%ld\n", joints_contours.size());
+        auto img = image.clone();
+        img.setTo(cv::Scalar(0,0,0));
+        // cv::polylines(img, boundRect[i], true, cv::Scalar(255, 255, 255), 2);
+        // cv::imshow("img", img);
+        cv::imshow("aaa", cv::Mat(imageResized, boundRect[i]));
+        cv::waitKey(0);
 
         // if the number is not more than 5 then most likely it not a table
         if(joints_contours.size() <= 4)
@@ -194,7 +212,7 @@ int main(int argc, char** argv )
     // cv::imshow("vertical", vertical);
     // cv::imshow("mask", mask);
     // cv::imshow("joints", joints);
-    cv::imshow("imageResized", imageResized);
+    // cv::imshow("imageResized", imageResized);
     cv::waitKey(0);
     return 0;
 }
