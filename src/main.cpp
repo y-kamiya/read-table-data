@@ -60,6 +60,67 @@ void displayLinesByCanny(cv::Mat &image) {
     cv::waitKey(0);
 }
 
+struct AverageBuilder {
+    float _rho = 0.0f;
+    float _theta = 0.0f;
+    int _count = 0;
+
+    AverageBuilder(float rho, float theta) {
+        _rho = rho;
+        _theta = theta;
+        _count = 1;
+    }
+
+    void add(float rho, float theta) {
+        _rho = (_rho * _count + rho) / (_count + 1);
+        _theta = (_theta * _count + theta) / (_count + 1);
+        _count += 1;
+    }
+
+};
+
+bool isTableLine(float theta) {
+    return theta <= 0.1
+        || (M_PI / 2 - 0.1 <= theta && theta <= M_PI / 2 + 0.1)
+        || M_PI - 0.1 < theta;
+}
+
+std::vector<cv::Vec2f> extractTableLines(std::vector<cv::Vec2f> &lines, float dRho, float dTheta) {
+    std::vector<AverageBuilder> linesUnited;
+    for (auto &line : lines) {
+        printf("raw lines: %f, %f\n", line[0], line[1]);
+        auto rho = line[0];
+        auto theta = line[1];
+        if (!isTableLine(theta)) {
+            continue;
+        }
+
+        auto it = std::find_if(linesUnited.begin(), linesUnited.end(),
+            [rho, theta, dRho, dTheta](AverageBuilder &entry) {
+                return rho - dRho < entry._rho && entry._rho < rho + dRho
+                    && theta - dTheta < entry._theta && entry._theta < theta + dTheta;
+        });
+
+        if (it == linesUnited.end()) {
+            AverageBuilder builder(rho, theta);
+            linesUnited.push_back(std::move(builder));
+        } else {
+            printf("aaaaaaaaa\n");
+            auto &builder = *it;
+            builder.add(rho, theta);
+        }
+    }
+
+    std::vector<cv::Vec2f> ret;
+    for (auto &builder : linesUnited) {
+        cv::Vec2f entry;
+        entry[0] = builder._rho;
+        entry[1] = builder._theta;
+        ret.push_back(std::move(entry));
+        printf("united lines: %f, %f\n", entry[0], entry[1]);
+    }
+    return ret;
+}
 
 
 int main(int argc, char** argv )
@@ -91,11 +152,7 @@ int main(int argc, char** argv )
     std::vector<cv::Vec2f> lines;
     cv::HoughLines(mask, lines, 1, 3.14/180, 200);
 
-    // 近い値の直線をまとめる
-    // p < 10, theta < 0.1くらい？
-    // std::vector<cv::Vec2f> acc;
-    // for (auto &line : lines) {
-    // }
+    auto tableLines = extractTableLines(lines, 50, 0.5);
 
     auto imageH = image.clone();
     imageH.setTo(cv::Scalar(0,0,0));
@@ -103,10 +160,10 @@ int main(int argc, char** argv )
     imageV.setTo(cv::Scalar(0,0,0));
 
     auto z = 1000;
-    for (auto &line : lines) {
-        // printf("%f, %f\n", line[0], line[1]);
+    for (auto &line : tableLines) {
         auto rho = line[0];
         auto theta = line[1];
+
         auto ct = cos(theta);
         auto st = sin(theta);
         auto start = cv::Point(rho * ct - z * st, rho * st + z * ct);
@@ -145,7 +202,7 @@ int main(int argc, char** argv )
     //     cv::waitKey(0);
     // }
     //
-    // cv::imshow("imageResized", imageResized);
+    cv::imshow("imageResized", imageResized);
     // cv::waitKey(0);
     // return 0;
 
@@ -181,7 +238,7 @@ int main(int argc, char** argv )
         img.setTo(cv::Scalar(0,0,0));
         // cv::polylines(img, boundRect[i], true, cv::Scalar(255, 255, 255), 2);
         // cv::imshow("img", img);
-        cv::imshow("aaa", cv::Mat(imageResized, boundRect[i]));
+        cv::imshow("aaa", cv::Mat(imageBinary, boundRect[i]));
         cv::waitKey(0);
 
         // if the number is not more than 5 then most likely it not a table
@@ -216,3 +273,6 @@ int main(int argc, char** argv )
     cv::waitKey(0);
     return 0;
 }
+
+
+
