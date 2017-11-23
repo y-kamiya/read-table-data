@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
+#include <tesseract/baseapi.h>
+#include <leptonica/allheaders.h>
 
 
 cv::Mat getVerticalMask(cv::Mat &imageBinary) {
@@ -237,14 +239,13 @@ int main(int argc, char** argv )
         double area = contourArea(contours[i]);
 
 //        // filter individual lines of blobs that might exist and they do not represent a table
-        if(area < 50000 || 100000 < area) // value is randomly chosen, you will need to find that by yourself with trial and error procedure
-            continue;
+        printf("%lf\n", area);
+        // if(area < 50000 || 100000 < area) // value is randomly chosen, you will need to find that by yourself with trial and error procedure
+            // continue;
 
         approxPolyDP( cv::Mat(contours[i]), contours_poly[i], 0.01 * cv::arcLength(contours[i], true), true );
         boundRect[i] = boundingRect( cv::Mat(contours_poly[i]) );
 
-        // printf("%ld\n", contours_poly[i].size());
-        printf("%lf\n", area);
         // find the number of joints that each table has
         auto roi = joints(boundRect[i]);
 
@@ -255,36 +256,59 @@ int main(int argc, char** argv )
 
         
         // cv::Mat img = cv::Mat(imageBinary, boundRect[i]);
-        boundRect[i].x += boundRect[i].width * 0.05f;
-        boundRect[i].y += boundRect[i].height * 0.05f;
-        boundRect[i].width *= 0.9;
-        boundRect[i].height *= 0.9;
-        cv::Mat img = cv::Mat(imageBinary, boundRect[i]);
-        dilate(img, img, getStructuringElement(cv::MORPH_RECT, cv::Size(7,7)));
-        erode(img, img,  getStructuringElement(cv::MORPH_RECT, cv::Size(3,3)));
-        cv::imwrite("output.jpg", img);
-        cv::imshow("aaa", img);
-        cv::waitKey(0);
+        // boundRect[i].x += boundRect[i].width * 0.05f;
+        // boundRect[i].y += boundRect[i].height * 0.05f;
+        // boundRect[i].width *= 0.9;
+        // boundRect[i].height *= 0.9;
 
-        // if the number is not more than 5 then most likely it not a table
-        if(joints_contours.size() <= 4)
-            continue;
-
-        rois.push_back(image(boundRect[i]).clone());
+        rois.push_back(imageBinary(boundRect[i]).clone());
 
 //        drawContours( image, contours, i, Scalar(0, 0, 255), CV_FILLED, 8, std::vector<Vec4i>(), 0, Point() );
         rectangle( imageResized, boundRect[i].tl(), boundRect[i].br(), cv::Scalar(0, 255, 0), 1, 8, 0 );
     }
 
-    std::cout << rois.size() << std::endl;
-    for(size_t i = 0; i < rois.size(); ++i)
-    {
-        /* Now you can do whatever post process you want
-         * with the data within the rectangles/tables. */
-        // cv::imshow("roi", rois[i]);
+
+
+
+    tesseract::TessBaseAPI *api = new tesseract::TessBaseAPI();
+    std::ofstream ofs("data.csv");
+
+    for(size_t i = 0; i < rois.size(); ++i) {
+        auto img = rois[i];
+        dilate(img, img, getStructuringElement(cv::MORPH_RECT, cv::Size(7,7)));
+        erode(img, img,  getStructuringElement(cv::MORPH_RECT, cv::Size(3,3)));
+        cv::imwrite("output.jpg", img);
+
+
+        char *outText;
+
+        // Initialize tesseract-ocr with English, without specifying tessdata path
+        if (api->Init(NULL, "eng")) {
+            fprintf(stderr, "Could not initialize tesseract.\n");
+            exit(1);
+        }
+
+        // Open input image with leptonica library
+        Pix *image = pixRead("/Users/uj/gws/read-table-data/build/output.jpg");
+        api->SetImage(image);
+        // Get OCR result
+        outText = api->GetUTF8Text();
+        auto str = std::string(outText);
+        auto num = 0;
+        try {
+            num = std::stoi(str);
+        } catch (std::exception e) { }
+        ofs << num << ',';
+        printf("OCR output:\n%s", outText);
+
+        delete [] outText;
+        pixDestroy(&image);
+
+        // cv::imshow("roi", img);
         // cv::waitKey();
     }
 
+    api->End();
 
 
 
@@ -295,7 +319,7 @@ int main(int argc, char** argv )
     // cv::imshow("mask", mask);
     // cv::imshow("joints", joints);
     // cv::imshow("imageResized", imageResized);
-    cv::waitKey(0);
+    // cv::waitKey(0);
     return 0;
 }
 
