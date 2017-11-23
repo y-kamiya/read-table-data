@@ -38,26 +38,16 @@ cv::Mat getHorizontalMask(cv::Mat &imageBinary) {
     return horizontal;
 }
 
-void displayLinesByCanny(cv::Mat &image) {
+cv::Mat displayLinesByCanny(cv::Mat &image) {
     cv::Mat edges;
     std::vector<cv::Vec2f> lines;
     cv::Canny(image, edges, 100, 300);
-    cv::imshow("edges", edges);
 
-    cv::HoughLines(edges, lines, 1, 3.14/180, 100);
-    auto z = image.cols;
-    for (auto &line : lines) {
-        printf("%f, %f\n", line[0], line[1]);
-        auto rho = line[0];
-        auto theta = line[1];
-        auto ct = cos(theta);
-        auto st = sin(theta);
-        auto start = cv::Point(rho * ct - z * st, rho * st + z * ct);
-        auto end   = cv::Point(rho * ct + z * st, rho * st - z * ct);
-        cv::line(image, start, end, cv::Scalar(0,0,255));
-    }
-    cv::imshow("image", image);
-    cv::waitKey(0);
+    auto kernel = getStructuringElement(cv::MORPH_RECT, cv::Size(3,3));
+    dilate(edges, edges, kernel);
+    erode(edges, edges, kernel);
+
+    return edges;
 }
 
 struct AverageBuilder {
@@ -189,9 +179,9 @@ int main(int argc, char** argv )
         auto start = cv::Point(rho * ct - z * st, rho * st + z * ct);
         auto end   = cv::Point(rho * ct + z * st, rho * st - z * ct);
         if (theta <= 0.1 || M_PI - 0.1 < theta) {
-            cv::line(imageV, start, end, cv::Scalar(255,255,255));
+            cv::line(imageV, start, end, cv::Scalar(255,255,255), 20);
         } else if (M_PI / 2 - 0.1 <= theta && theta <= M_PI / 2 + 0.1) {
-            cv::line(imageH, start, end, cv::Scalar(255,255,255));
+            cv::line(imageH, start, end, cv::Scalar(255,255,255), 20);
         }
     }
 
@@ -201,7 +191,6 @@ int main(int argc, char** argv )
 
     cv::Mat imageMask = imageH + imageV;
     cv::imshow("imageMask", imageMask);
-
 
 
     // Find external contours from the mask, which most probably will belong to tables or to images
@@ -222,11 +211,20 @@ int main(int argc, char** argv )
     //     cv::waitKey(0);
     // }
     //
-    cv::imshow("imageResized", imageResized);
+    // cv::imshow("imageResized", imageResized);
     // cv::waitKey(0);
     // return 0;
 
 
+    auto kernel = getStructuringElement(cv::MORPH_RECT, cv::Size(2,2));
+    erode(imageBinary, imageBinary, kernel );
+    dilate(imageBinary, imageBinary, kernel);
+    imshow("binary", imageBinary);
+
+    // auto edges = displayLinesByCanny(imageBinary);
+    // edges = edges - imageMask;
+    // imageBinary = imageBinary - imageMask;
+    // imshow("edges", edges);
 
 
     std::vector<std::vector<cv::Point> > contours_poly( contours.size() );
@@ -254,11 +252,18 @@ int main(int argc, char** argv )
         findContours(roi, joints_contours, cv::RETR_CCOMP, cv::CHAIN_APPROX_SIMPLE);
 
         printf("%ld\n", joints_contours.size());
-        auto img = image.clone();
-        img.setTo(cv::Scalar(0,0,0));
-        // cv::polylines(img, boundRect[i], true, cv::Scalar(255, 255, 255), 2);
-        // cv::imshow("img", img);
-        cv::imshow("aaa", cv::Mat(imageBinary, boundRect[i]));
+
+        
+        // cv::Mat img = cv::Mat(imageBinary, boundRect[i]);
+        boundRect[i].x += boundRect[i].width * 0.05f;
+        boundRect[i].y += boundRect[i].height * 0.05f;
+        boundRect[i].width *= 0.9;
+        boundRect[i].height *= 0.9;
+        cv::Mat img = cv::Mat(imageBinary, boundRect[i]);
+        dilate(img, img, getStructuringElement(cv::MORPH_RECT, cv::Size(7,7)));
+        erode(img, img,  getStructuringElement(cv::MORPH_RECT, cv::Size(3,3)));
+        cv::imwrite("output.jpg", img);
+        cv::imshow("aaa", img);
         cv::waitKey(0);
 
         // if the number is not more than 5 then most likely it not a table
