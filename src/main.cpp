@@ -85,20 +85,36 @@ bool isTableLine(float theta) {
         || M_PI - 0.1 < theta;
 }
 
+float translateTheta(float theta) {
+    return M_PI - 0.1f <= theta ? theta - M_PI : theta;
+}
+
+bool isSimilarLineHorizontal(float rho, float theta, float dRho, float dTheta, AverageBuilder &entry) {
+    return rho - dRho < entry._rho && entry._rho < rho + dRho
+        && theta - dTheta < entry._theta && entry._theta < theta + dTheta;
+}
+
+bool isSimilarLineVertical(float rho, float theta, float dRho, float dTheta, AverageBuilder &entry) {
+    auto _rho = fabs(rho);
+    auto _theta = translateTheta(theta);
+    return _rho - dRho < entry._rho && entry._rho < _rho + dRho
+        && _theta - dTheta < entry._theta && entry._theta < _theta + dTheta;
+}
+
 std::vector<cv::Vec2f> extractTableLines(std::vector<cv::Vec2f> &lines, float dRho, float dTheta) {
     std::vector<AverageBuilder> linesUnited;
     for (auto &line : lines) {
         printf("raw lines: %f, %f\n", line[0], line[1]);
-        auto rho = line[0];
-        auto theta = line[1];
+        auto rho = fabs(line[0]);
+        auto theta = translateTheta(line[1]);
         if (!isTableLine(theta)) {
             continue;
         }
 
         auto it = std::find_if(linesUnited.begin(), linesUnited.end(),
             [rho, theta, dRho, dTheta](AverageBuilder &entry) {
-                return rho - dRho < entry._rho && entry._rho < rho + dRho
-                    && theta - dTheta < entry._theta && entry._theta < theta + dTheta;
+                return isSimilarLineHorizontal(rho, theta, dRho, dTheta, entry)
+                    && isSimilarLineVertical(rho, theta, dRho, dTheta, entry);
         });
 
         if (it == linesUnited.end()) {
@@ -116,6 +132,10 @@ std::vector<cv::Vec2f> extractTableLines(std::vector<cv::Vec2f> &lines, float dR
         cv::Vec2f entry;
         entry[0] = builder._rho;
         entry[1] = builder._theta;
+        if (entry[1] < 0) {
+            entry[0] = -1 * entry[0];
+            entry[1] = M_PI + entry[1];
+        }
         ret.push_back(std::move(entry));
         printf("united lines: %f, %f\n", entry[0], entry[1]);
     }
