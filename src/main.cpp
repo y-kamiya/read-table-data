@@ -3,14 +3,14 @@
 #include <tesseract/baseapi.h>
 #include <leptonica/allheaders.h>
 
+int SCALE_FOR_MASK = 10;
+float RADIAN_LINE_THRESHOLD = 0.1f;
 
 cv::Mat getVerticalMask(cv::Mat &imageBinary) {
     auto vertical = imageBinary.clone();
 
-    int scale = 10; // play with this variable in order to increase/decrease the amount of lines to be detected
-
     // Specify size on vertical axis
-    int verticalsize = vertical.rows / scale;
+    int verticalsize = vertical.rows / SCALE_FOR_MASK;
 
     // Create structure element for extracting vertical lines through morphology operations
     auto verticalStructure = getStructuringElement(cv::MORPH_RECT, cv::Size( 1,verticalsize));
@@ -25,10 +25,8 @@ cv::Mat getVerticalMask(cv::Mat &imageBinary) {
 cv::Mat getHorizontalMask(cv::Mat &imageBinary) {
     auto horizontal = imageBinary.clone();
 
-    int scale = 10; // play with this variable in order to increase/decrease the amount of lines to be detected
-
     // Specify size on horizontal axis
-    int horizontalsize = horizontal.cols / scale;
+    int horizontalsize = horizontal.cols / SCALE_FOR_MASK;
 
     // Create structure element for extracting horizontal lines through morphology operations
     auto horizontalStructure = getStructuringElement(cv::MORPH_RECT, cv::Size(horizontalsize,1));
@@ -72,9 +70,9 @@ struct AverageBuilder {
 };
 
 bool isTableLine(float theta) {
-    return theta <= 0.1
-        || (M_PI / 2 - 0.1 <= theta && theta <= M_PI / 2 + 0.1)
-        || M_PI - 0.1 < theta;
+    return theta <= RADIAN_LINE_THRESHOLD
+        || (M_PI / 2 - RADIAN_LINE_THRESHOLD <= theta && theta <= M_PI / 2 + RADIAN_LINE_THRESHOLD)
+        || M_PI - RADIAN_LINE_THRESHOLD < theta;
 }
 
 float translateTheta(float theta) {
@@ -103,20 +101,25 @@ std::vector<cv::Vec2f> extractTableLines(std::vector<cv::Vec2f> &lines, float dR
             continue;
         }
 
+        if (!((theta <= RADIAN_LINE_THRESHOLD || M_PI - RADIAN_LINE_THRESHOLD < theta)
+                && line[0] <= 0)) {
+            continue;
+
+        }
         auto it = std::find_if(linesUnited.begin(), linesUnited.end(),
             [rho, theta, dRho, dTheta](AverageBuilder &entry) {
                 return isSimilarLineHorizontal(rho, theta, dRho, dTheta, entry)
                     && isSimilarLineVertical(rho, theta, dRho, dTheta, entry);
         });
 
-        if (it == linesUnited.end()) {
+        // if (it == linesUnited.end()) {
             AverageBuilder builder(rho, theta);
             linesUnited.push_back(std::move(builder));
-        } else {
-            printf("aaaaaaaaa\n");
-            auto &builder = *it;
-            builder.add(rho, theta);
-        }
+        // } else {
+        //     printf("aaaaaaaaa\n");
+        //     auto &builder = *it;
+        //     builder.add(rho, theta);
+        // }
     }
 
     std::vector<cv::Vec2f> ret;
@@ -147,7 +150,9 @@ int main(int argc, char** argv )
     auto imageIn = cv::imread(imageName, 1);
 
     cv::Mat image, imageResized;
-    cv::resize(imageIn, imageResized, cv::Size(800,900));
+    cv::Size size(imageIn.size().width * 0.2f, imageIn.size().height * 0.2f);
+    // cv::Size size(imageIn.size().width, imageIn.size().height);
+    cv::resize(imageIn, imageResized, size);
     cv::cvtColor(imageResized, image, CV_BGR2GRAY);
     if ( !image.data )
     {
@@ -157,21 +162,29 @@ int main(int argc, char** argv )
     cv::Mat imageBinary;
     cv::adaptiveThreshold(~image, imageBinary, 255, CV_ADAPTIVE_THRESH_GAUSSIAN_C, cv::THRESH_BINARY, 15, -10);
 
+    // auto kernel1 = getStructuringElement(cv::MORPH_RECT, cv::Size(2,2));
+    // dilate(imageBinary, imageBinary, kernel1);
+    // erode(imageBinary, imageBinary, kernel1 );
+
     auto horizontal = getHorizontalMask(imageBinary);
     auto vertical = getVerticalMask(imageBinary);
 
     cv::Mat mask = horizontal + vertical;
     std::vector<cv::Vec2f> lines;
-    cv::HoughLines(mask, lines, 1, 3.14/180, 200);
+    cv::HoughLines(mask, lines, 1, 3.14/180, 100);
 
-    auto tableLines = extractTableLines(lines, 50, 0.5);
+    cv::imshow("mask", mask);
+    // cv::waitKey(0);
+    // return 0;
+    auto tableLines = extractTableLines(lines, 25, 0.3);
+    // auto tableLines = lines;
 
     auto imageH = image.clone();
     imageH.setTo(cv::Scalar(0,0,0));
     auto imageV = image.clone();
     imageV.setTo(cv::Scalar(0,0,0));
 
-    auto z = 1000;
+    auto z = std::max(imageIn.size().width, imageIn.size().height); 
     for (auto &line : tableLines) {
         auto rho = line[0];
         auto theta = line[1];
@@ -181,18 +194,20 @@ int main(int argc, char** argv )
         auto start = cv::Point(rho * ct - z * st, rho * st + z * ct);
         auto end   = cv::Point(rho * ct + z * st, rho * st - z * ct);
         if (theta <= 0.1 || M_PI - 0.1 < theta) {
-            cv::line(imageV, start, end, cv::Scalar(255,255,255), 20);
+            cv::line(imageV, start, end, cv::Scalar(255,255,255), 1);
         } else if (M_PI / 2 - 0.1 <= theta && theta <= M_PI / 2 + 0.1) {
-            cv::line(imageH, start, end, cv::Scalar(255,255,255), 20);
+            cv::line(imageH, start, end, cv::Scalar(255,255,255), 2);
         }
     }
 
-    cv::Mat joints;
-    bitwise_and(imageH, imageV, joints);
+    // cv::Mat joints;
+    // bitwise_and(imageH, imageV, joints);
     // cv::imshow("joints", joints);
 
     cv::Mat imageMask = imageH + imageV;
     cv::imshow("imageMask", imageMask);
+    cv::waitKey(0);
+    return 0;
 
 
     // Find external contours from the mask, which most probably will belong to tables or to images
@@ -218,41 +233,41 @@ int main(int argc, char** argv )
     // return 0;
 
 
-    auto kernel = getStructuringElement(cv::MORPH_RECT, cv::Size(2,2));
+    auto kernel = getStructuringElement(cv::MORPH_RECT, cv::Size(1,1));
     erode(imageBinary, imageBinary, kernel );
     dilate(imageBinary, imageBinary, kernel);
-    imshow("binary", imageBinary);
 
     // auto edges = displayLinesByCanny(imageBinary);
     // edges = edges - imageMask;
-    // imageBinary = imageBinary - imageMask;
+    imageBinary = imageBinary - imageMask;
     // imshow("edges", edges);
+    imshow("binary", imageBinary);
+    imshow("imageMask", imageMask);
 
 
     std::vector<std::vector<cv::Point> > contours_poly( contours.size() );
     std::vector<cv::Rect> boundRect( contours.size() );
     std::vector<cv::Mat> rois;
 
-    for (size_t i = 0; i < contours.size(); i++)
-    {
+    for (size_t i = 0; i < contours.size(); i++) {
         // find the area of each contour
         double area = contourArea(contours[i]);
 
-//        // filter individual lines of blobs that might exist and they do not represent a table
         printf("%lf\n", area);
-        // if(area < 50000 || 100000 < area) // value is randomly chosen, you will need to find that by yourself with trial and error procedure
-            // continue;
+        if(area < 1000 || 3000 < area) {
+            continue;
+        }
 
         approxPolyDP( cv::Mat(contours[i]), contours_poly[i], 0.01 * cv::arcLength(contours[i], true), true );
         boundRect[i] = boundingRect( cv::Mat(contours_poly[i]) );
 
         // find the number of joints that each table has
-        auto roi = joints(boundRect[i]);
-
-        std::vector<std::vector<cv::Point> > joints_contours;
-        findContours(roi, joints_contours, cv::RETR_CCOMP, cv::CHAIN_APPROX_SIMPLE);
-
-        printf("%ld\n", joints_contours.size());
+        // auto roi = joints(boundRect[i]);
+        //
+        // std::vector<std::vector<cv::Point> > joints_contours;
+        // findContours(roi, joints_contours, cv::RETR_CCOMP, cv::CHAIN_APPROX_SIMPLE);
+        //
+        // printf("%ld\n", joints_contours.size());
 
         
         // cv::Mat img = cv::Mat(imageBinary, boundRect[i]);
@@ -271,12 +286,13 @@ int main(int argc, char** argv )
 
 
     tesseract::TessBaseAPI *api = new tesseract::TessBaseAPI();
+    api->SetVariable("tessedit_char_whitelist", "0123456789");
     std::ofstream ofs("data.csv");
 
     for(size_t i = 0; i < rois.size(); ++i) {
         auto img = rois[i];
-        dilate(img, img, getStructuringElement(cv::MORPH_RECT, cv::Size(7,7)));
-        erode(img, img,  getStructuringElement(cv::MORPH_RECT, cv::Size(3,3)));
+        // dilate(img, img, getStructuringElement(cv::MORPH_RECT, cv::Size(7,7)));
+        // erode(img, img,  getStructuringElement(cv::MORPH_RECT, cv::Size(3,3)));
         cv::imwrite("output.jpg", img);
 
 
@@ -304,8 +320,8 @@ int main(int argc, char** argv )
         delete [] outText;
         pixDestroy(&image);
 
-        // cv::imshow("roi", img);
-        // cv::waitKey();
+        cv::imshow("roi", img);
+        cv::waitKey();
     }
 
     api->End();
