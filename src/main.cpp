@@ -363,21 +363,20 @@ int main(int argc, char** argv )
 
     std::vector<int> result;
     result.reserve(10000);
+    std::ofstream ofs("data.csv");
 
     auto groups = sortCells(rois);
     for (auto &group : groups) {
         for (auto &cell : group) {
             // printf("cell x: %d, y: %d\n", cell.x, cell.y);
-            result.push_back(getNumberFromCell(cell, api));
+            // result.push_back(getNumberFromCell(cell, api));
+            auto num = getNumberFromCell(cell, api);
+            ofs << num << ',';
         }
+        ofs << std::endl;
     }
 
     api->End();
-
-    std::ofstream ofs("data.csv");
-    for (auto num : result) {
-        ofs << num << ',';
-    }
 
 
     // cv::namedWindow("Display Image", cv::WINDOW_AUTOSIZE );
