@@ -4,7 +4,13 @@
 #include <leptonica/allheaders.h>
 
 int SCALE_FOR_MASK = 20;
-float RADIAN_LINE_THRESHOLD = 0.1f;
+int THRESHOLD_SAME_ROW = 50;
+
+float CELL_SIZE = 8000.0f;
+float RATIO_CELL_SIZE = 0.9f;
+float THRESHOLD_SAME_LINE_RADIAN = 0.1f;
+float THRESHOLD_SAME_LINE_RHO = 25.0f;
+float RATIO_IMAGE_SIZE = 0.4f;
 
 cv::Mat getVerticalMask(cv::Mat &imageBinary) {
     auto vertical = imageBinary.clone();
@@ -70,13 +76,13 @@ struct AverageBuilder {
 };
 
 bool isTableLine(float theta) {
-    return theta <= RADIAN_LINE_THRESHOLD
-        || (M_PI / 2 - RADIAN_LINE_THRESHOLD <= theta && theta <= M_PI / 2 + RADIAN_LINE_THRESHOLD)
-        || M_PI - RADIAN_LINE_THRESHOLD < theta;
+    return theta <= THRESHOLD_SAME_LINE_RADIAN
+        || (M_PI / 2 - THRESHOLD_SAME_LINE_RADIAN <= theta && theta <= M_PI / 2 + THRESHOLD_SAME_LINE_RADIAN)
+        || M_PI - THRESHOLD_SAME_LINE_RADIAN < theta;
 }
 
 float translateTheta(float theta) {
-    return M_PI - 0.1f <= theta ? theta - M_PI : theta;
+    return M_PI - THRESHOLD_SAME_LINE_RADIAN <= theta ? theta - M_PI : theta;
 }
 
 bool isSimilarLineHorizontal(float rho, float theta, float dRho, float dTheta, AverageBuilder &entry) {
@@ -94,7 +100,7 @@ bool isSimilarLineVertical(float rho, float theta, float dRho, float dTheta, Ave
 std::vector<cv::Vec2f> extractTableLines(std::vector<cv::Vec2f> &lines, float dRho, float dTheta) {
     std::vector<AverageBuilder> linesUnited;
     for (auto &line : lines) {
-        printf("raw lines: %f, %f\n", line[0], line[1]);
+        // printf("raw lines: %f, %f\n", line[0], line[1]);
         auto rho = fabs(line[0]);
         auto theta = translateTheta(line[1]);
         if (!isTableLine(theta)) {
@@ -111,7 +117,6 @@ std::vector<cv::Vec2f> extractTableLines(std::vector<cv::Vec2f> &lines, float dR
             AverageBuilder builder(rho, theta);
             linesUnited.push_back(std::move(builder));
         } else {
-            printf("aaaaaaaaa\n");
             auto &builder = *it;
             builder.add(rho, theta);
         }
@@ -164,8 +169,6 @@ struct Cell {
 };
 
 
-int THRESHOLD_SAME_ROW = 50;
-
 std::vector<std::vector<Cell>> sortCells(std::vector<Cell> &cells) {
     std::sort(cells.begin(), cells.end(), [](Cell &a, Cell &b) {
         return a.y < b.y;
@@ -198,7 +201,7 @@ int getNumberFromCell(Cell &cell, tesseract::TessBaseAPI *api) {
     cv::imwrite("output.jpg", img);
 
     std::vector<cv::Vec2f> lines;
-    auto threshold = static_cast<int>(std::min(img.rows, img.cols)*0.7);
+    auto threshold = static_cast<int>(std::min(img.rows, img.cols)*0.7f);
     // auto threshold = static_cast<int>(std::min(img.rows, img.cols)*0.9);
     cv::HoughLines(img, lines, 1, 3.14/180 * 5, threshold);
     auto imageLines = drawTableLinesOnBlack(img, lines, 3);
@@ -245,8 +248,7 @@ int main(int argc, char** argv )
     auto imageIn = cv::imread(imageName, 1);
 
     cv::Mat image, imageResized;
-    cv::Size size(imageIn.size().width * 0.4f, imageIn.size().height * 0.4f);
-    // cv::Size size(imageIn.size().width, imageIn.size().height);
+    cv::Size size(imageIn.size().width * RATIO_IMAGE_SIZE, imageIn.size().height * RATIO_IMAGE_SIZE);
     cv::resize(imageIn, imageResized, size);
     cv::cvtColor(imageResized, image, CV_BGR2GRAY);
     if ( !image.data )
@@ -271,7 +273,7 @@ int main(int argc, char** argv )
     cv::imshow("mask", mask);
     // cv::waitKey(0);
     // return 0;
-    auto tableLines = extractTableLines(lines, 25, 0.3);
+    auto tableLines = extractTableLines(lines, THRESHOLD_SAME_LINE_RHO, THRESHOLD_SAME_LINE_RADIAN);
     // auto tableLines = lines;
 
     auto imageMask = drawTableLinesOnBlack(image, tableLines);
@@ -324,7 +326,7 @@ int main(int argc, char** argv )
 
         printf("%lf\n", area);
         // if(area < 1000 || 3000 < area) {
-        if(area < 7000 || 13000 < area) {
+        if(area < CELL_SIZE * 0.8f || CELL_SIZE * 1.2f < area) {
             continue;
         }
 
@@ -341,10 +343,10 @@ int main(int argc, char** argv )
 
         // cv::Mat img = cv::Mat(imageBinary, boundRect[i]);
         auto rect = boundRect[i];
-        rect.x += rect.width * 0.05f;
-        rect.y += rect.height * 0.05f;
-        rect.width *= 0.9;
-        rect.height *= 0.9;
+        rect.x += rect.width * (1.0f - RATIO_CELL_SIZE) / 2;
+        rect.y += rect.height * (1.0f - RATIO_CELL_SIZE) / 2;
+        rect.width *= RATIO_CELL_SIZE;
+        rect.height *= RATIO_CELL_SIZE;
 
         Cell cell(rect.x, rect.y, imageBinary(rect).clone());
         rois.push_back(std::move(cell));
@@ -361,15 +363,12 @@ int main(int argc, char** argv )
     }
     // api->SetVariable("tessedit_char_whitelist", "0123456789");
 
-    std::vector<int> result;
-    result.reserve(10000);
     std::ofstream ofs("data.csv");
 
     auto groups = sortCells(rois);
     for (auto &group : groups) {
         for (auto &cell : group) {
             // printf("cell x: %d, y: %d\n", cell.x, cell.y);
-            // result.push_back(getNumberFromCell(cell, api));
             auto num = getNumberFromCell(cell, api);
             ofs << num << ',';
         }
