@@ -136,7 +136,7 @@ cv::Mat drawTableLinesOnBlack(cv::Mat &image, std::vector<cv::Vec2f> &lines, int
     auto img = image.clone();
     img.setTo(cv::Scalar(0,0,0));
 
-    auto z = std::max(img.size().width, img.size().height); 
+    auto z = std::max(img.size().width, img.size().height);
     for (auto &line : lines) {
         auto rho = line[0];
         auto theta = line[1];
@@ -150,6 +150,87 @@ cv::Mat drawTableLinesOnBlack(cv::Mat &image, std::vector<cv::Vec2f> &lines, int
         }
     }
     return img;
+}
+
+struct Cell {
+    int x;
+    int y;
+    cv::Mat data;
+
+    Cell() {}
+    Cell(int x, int y, cv::Mat data): x(x), y(y), data(data) {
+    }
+
+};
+
+
+int THRESHOLD_SAME_ROW = 50;
+
+std::vector<std::vector<Cell>> sortCells(std::vector<Cell> &cells) {
+    std::sort(cells.begin(), cells.end(), [](Cell &a, Cell &b) {
+        return a.y < b.y;
+    });
+
+    std::vector<std::vector<Cell>> groups;
+    Cell cellPrev;
+    cellPrev.y = -10000;
+    auto index = -1;
+    for (auto &cell : cells) {
+        if (THRESHOLD_SAME_ROW < cell.y - cellPrev.y) {
+            groups.push_back(std::vector<Cell>());
+            cellPrev = cell;
+            index++;
+            // printf("index: %d, y: %d\n", index, cell.y);
+        }
+        groups[index].push_back(cell);
+    }
+
+    for (auto &group : groups) {
+        std::sort(group.begin(), group.end(), [](Cell &a, Cell &b) {
+            return a.x < b.x;
+        });
+    }
+    return groups;
+}
+
+int getNumberFromCell(Cell &cell, tesseract::TessBaseAPI *api) {
+    auto img = cell.data;
+    cv::imwrite("output.jpg", img);
+
+    std::vector<cv::Vec2f> lines;
+    auto threshold = static_cast<int>(std::min(img.rows, img.cols)*0.7);
+    // auto threshold = static_cast<int>(std::min(img.rows, img.cols)*0.9);
+    cv::HoughLines(img, lines, 1, 3.14/180 * 5, threshold);
+    auto imageLines = drawTableLinesOnBlack(img, lines, 3);
+    cv::imwrite("output_line.jpg", imageLines);
+
+    img = img - imageLines;
+    erode(img, img,  getStructuringElement(cv::MORPH_RECT, cv::Size(2,2)));
+    dilate(img, img, getStructuringElement(cv::MORPH_RECT, cv::Size(3,3)));
+    cv::imwrite("output_final.jpg", img);
+
+    char *outText;
+
+    // Open input image with leptonica library
+    Pix *image = pixRead("/Users/uj/gws/read-table-data/build/output_final.jpg");
+    api->SetImage(image);
+    // Get OCR result
+    outText = api->GetUTF8Text();
+    auto str = std::string(outText);
+    auto num = 0;
+    try {
+        num = std::stoi(str);
+    } catch (std::exception e) { }
+
+    printf("OCR output num: %d\n", num);
+    printf("OCR output txt: %s\n", outText);
+
+    delete [] outText;
+    pixDestroy(&image);
+
+    cv::imshow("roi", img);
+    // cv::waitKey();
+    return num;
 }
 
 int main(int argc, char** argv )
@@ -196,7 +277,7 @@ int main(int argc, char** argv )
     auto imageMask = drawTableLinesOnBlack(image, tableLines);
     cv::imshow("imageMask", imageMask);
     // cv::waitKey(0);
-    // return 0;
+
 
     // Find external contours from the mask, which most probably will belong to tables or to images
     std::vector<cv::Vec4i> hierarchy;
@@ -206,7 +287,7 @@ int main(int argc, char** argv )
 
     // for (auto contour = contours.begin(); contour != contours.end(); contour++){
     //     cv::polylines(imageResized, *contour, true, cv::Scalar(0, 255, 0), 2);
-    // }   
+    // }
     // printf("%ld\n", contours.size());
     // for (size_t i = 0; i < contours.size(); i++) {
     //     auto img = image.clone();
@@ -235,7 +316,7 @@ int main(int argc, char** argv )
 
     std::vector<std::vector<cv::Point> > contours_poly( contours.size() );
     std::vector<cv::Rect> boundRect( contours.size() );
-    std::vector<cv::Mat> rois;
+    std::vector<Cell> rois;
 
     for (size_t i = 0; i < contours.size(); i++) {
         // find the area of each contour
@@ -258,20 +339,19 @@ int main(int argc, char** argv )
         //
         // printf("%ld\n", joints_contours.size());
 
-        
         // cv::Mat img = cv::Mat(imageBinary, boundRect[i]);
-        boundRect[i].x += boundRect[i].width * 0.05f;
-        boundRect[i].y += boundRect[i].height * 0.05f;
-        boundRect[i].width *= 0.9;
-        boundRect[i].height *= 0.9;
+        auto rect = boundRect[i];
+        rect.x += rect.width * 0.05f;
+        rect.y += rect.height * 0.05f;
+        rect.width *= 0.9;
+        rect.height *= 0.9;
 
-        rois.push_back(imageBinary(boundRect[i]).clone());
+        Cell cell(rect.x, rect.y, imageBinary(rect).clone());
+        rois.push_back(std::move(cell));
 
 //        drawContours( image, contours, i, Scalar(0, 0, 255), CV_FILLED, 8, std::vector<Vec4i>(), 0, Point() );
-        rectangle( imageResized, boundRect[i].tl(), boundRect[i].br(), cv::Scalar(0, 255, 0), 1, 8, 0 );
+        // rectangle( imageResized, rect.tl(), rect.br(), cv::Scalar(0, 255, 0), 1, 8, 0 );
     }
-
-
 
 
     tesseract::TessBaseAPI *api = new tesseract::TessBaseAPI();
@@ -282,51 +362,17 @@ int main(int argc, char** argv )
     // api->SetVariable("tessedit_char_whitelist", "0123456789");
 
     std::vector<int> result;
-    result.reserve(rois.size());
+    result.reserve(10000);
 
-    for(size_t i = 0; i < rois.size(); ++i) {
-        auto img = rois[i];
-        cv::imwrite("output.jpg", img);
-
-        std::vector<cv::Vec2f> lines;
-        auto threshold = static_cast<int>(std::min(img.rows, img.cols)*0.7);
-        // auto threshold = static_cast<int>(std::min(img.rows, img.cols)*0.9);
-        cv::HoughLines(img, lines, 1, 3.14/180 * 5, threshold);
-        auto imageLines = drawTableLinesOnBlack(img, lines, 3);
-        cv::imwrite("output_line.jpg", imageLines);
-
-        img = img - imageLines;
-        erode(img, img,  getStructuringElement(cv::MORPH_RECT, cv::Size(2,2)));
-        dilate(img, img, getStructuringElement(cv::MORPH_RECT, cv::Size(3,3)));
-        cv::imwrite("output_final.jpg", img);
-
-        char *outText;
-
-        // Open input image with leptonica library
-        Pix *image = pixRead("/Users/uj/gws/read-table-data/build/output_final.jpg");
-        api->SetImage(image);
-        // Get OCR result
-        outText = api->GetUTF8Text();
-        auto str = std::string(outText);
-        auto num = 0;
-        try {
-            num = std::stoi(str);
-        } catch (std::exception e) { }
-        result.push_back(num);
-        printf("OCR output i: %zu\n", i);
-        printf("OCR output num: %d\n", num);
-        printf("OCR output txt: %s\n", outText);
-
-        delete [] outText;
-        pixDestroy(&image);
-
-        cv::imshow("roi", img);
-        // cv::waitKey();
+    auto groups = sortCells(rois);
+    for (auto &group : groups) {
+        for (auto &cell : group) {
+            // printf("cell x: %d, y: %d\n", cell.x, cell.y);
+            result.push_back(getNumberFromCell(cell, api));
+        }
     }
 
     api->End();
-
-    std::reverse(result.begin(), result.end());
 
     std::ofstream ofs("data.csv");
     for (auto num : result) {
