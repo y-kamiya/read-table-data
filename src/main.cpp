@@ -3,7 +3,7 @@
 #include <tesseract/baseapi.h>
 #include <leptonica/allheaders.h>
 
-int SCALE_FOR_MASK = 10;
+int SCALE_FOR_MASK = 20;
 float RADIAN_LINE_THRESHOLD = 0.1f;
 
 cv::Mat getVerticalMask(cv::Mat &imageBinary) {
@@ -101,25 +101,20 @@ std::vector<cv::Vec2f> extractTableLines(std::vector<cv::Vec2f> &lines, float dR
             continue;
         }
 
-        if (!((theta <= RADIAN_LINE_THRESHOLD || M_PI - RADIAN_LINE_THRESHOLD < theta)
-                && line[0] <= 0)) {
-            continue;
-
-        }
         auto it = std::find_if(linesUnited.begin(), linesUnited.end(),
             [rho, theta, dRho, dTheta](AverageBuilder &entry) {
                 return isSimilarLineHorizontal(rho, theta, dRho, dTheta, entry)
                     && isSimilarLineVertical(rho, theta, dRho, dTheta, entry);
         });
 
-        // if (it == linesUnited.end()) {
+        if (it == linesUnited.end()) {
             AverageBuilder builder(rho, theta);
             linesUnited.push_back(std::move(builder));
-        // } else {
-        //     printf("aaaaaaaaa\n");
-        //     auto &builder = *it;
-        //     builder.add(rho, theta);
-        // }
+        } else {
+            printf("aaaaaaaaa\n");
+            auto &builder = *it;
+            builder.add(rho, theta);
+        }
     }
 
     std::vector<cv::Vec2f> ret;
@@ -137,6 +132,25 @@ std::vector<cv::Vec2f> extractTableLines(std::vector<cv::Vec2f> &lines, float dR
     return ret;
 }
 
+cv::Mat drawTableLinesOnBlack(cv::Mat &image, std::vector<cv::Vec2f> &lines, int thickness = 1) {
+    auto img = image.clone();
+    img.setTo(cv::Scalar(0,0,0));
+
+    auto z = std::max(img.size().width, img.size().height); 
+    for (auto &line : lines) {
+        auto rho = line[0];
+        auto theta = line[1];
+
+        auto ct = cos(theta);
+        auto st = sin(theta);
+        auto start = cv::Point(rho * ct - z * st, rho * st + z * ct);
+        auto end   = cv::Point(rho * ct + z * st, rho * st - z * ct);
+        if (isTableLine(theta)) {
+            cv::line(img, start, end, cv::Scalar(255,255,255), thickness);
+        }
+    }
+    return img;
+}
 
 int main(int argc, char** argv )
 {
@@ -150,7 +164,7 @@ int main(int argc, char** argv )
     auto imageIn = cv::imread(imageName, 1);
 
     cv::Mat image, imageResized;
-    cv::Size size(imageIn.size().width * 0.2f, imageIn.size().height * 0.2f);
+    cv::Size size(imageIn.size().width * 0.4f, imageIn.size().height * 0.4f);
     // cv::Size size(imageIn.size().width, imageIn.size().height);
     cv::resize(imageIn, imageResized, size);
     cv::cvtColor(imageResized, image, CV_BGR2GRAY);
@@ -171,7 +185,7 @@ int main(int argc, char** argv )
 
     cv::Mat mask = horizontal + vertical;
     std::vector<cv::Vec2f> lines;
-    cv::HoughLines(mask, lines, 1, 3.14/180, 100);
+    cv::HoughLines(mask, lines, 1, 3.14/180 * 5, 100);
 
     cv::imshow("mask", mask);
     // cv::waitKey(0);
@@ -179,36 +193,10 @@ int main(int argc, char** argv )
     auto tableLines = extractTableLines(lines, 25, 0.3);
     // auto tableLines = lines;
 
-    auto imageH = image.clone();
-    imageH.setTo(cv::Scalar(0,0,0));
-    auto imageV = image.clone();
-    imageV.setTo(cv::Scalar(0,0,0));
-
-    auto z = std::max(imageIn.size().width, imageIn.size().height); 
-    for (auto &line : tableLines) {
-        auto rho = line[0];
-        auto theta = line[1];
-
-        auto ct = cos(theta);
-        auto st = sin(theta);
-        auto start = cv::Point(rho * ct - z * st, rho * st + z * ct);
-        auto end   = cv::Point(rho * ct + z * st, rho * st - z * ct);
-        if (theta <= 0.1 || M_PI - 0.1 < theta) {
-            cv::line(imageV, start, end, cv::Scalar(255,255,255), 1);
-        } else if (M_PI / 2 - 0.1 <= theta && theta <= M_PI / 2 + 0.1) {
-            cv::line(imageH, start, end, cv::Scalar(255,255,255), 2);
-        }
-    }
-
-    // cv::Mat joints;
-    // bitwise_and(imageH, imageV, joints);
-    // cv::imshow("joints", joints);
-
-    cv::Mat imageMask = imageH + imageV;
+    auto imageMask = drawTableLinesOnBlack(image, tableLines);
     cv::imshow("imageMask", imageMask);
-    cv::waitKey(0);
-    return 0;
-
+    // cv::waitKey(0);
+    // return 0;
 
     // Find external contours from the mask, which most probably will belong to tables or to images
     std::vector<cv::Vec4i> hierarchy;
@@ -239,7 +227,7 @@ int main(int argc, char** argv )
 
     // auto edges = displayLinesByCanny(imageBinary);
     // edges = edges - imageMask;
-    imageBinary = imageBinary - imageMask;
+    // imageBinary = imageBinary - imageMask;
     // imshow("edges", edges);
     imshow("binary", imageBinary);
     imshow("imageMask", imageMask);
@@ -254,7 +242,8 @@ int main(int argc, char** argv )
         double area = contourArea(contours[i]);
 
         printf("%lf\n", area);
-        if(area < 1000 || 3000 < area) {
+        // if(area < 1000 || 3000 < area) {
+        if(area < 7000 || 13000 < area) {
             continue;
         }
 
@@ -271,10 +260,10 @@ int main(int argc, char** argv )
 
         
         // cv::Mat img = cv::Mat(imageBinary, boundRect[i]);
-        // boundRect[i].x += boundRect[i].width * 0.05f;
-        // boundRect[i].y += boundRect[i].height * 0.05f;
-        // boundRect[i].width *= 0.9;
-        // boundRect[i].height *= 0.9;
+        boundRect[i].x += boundRect[i].width * 0.05f;
+        boundRect[i].y += boundRect[i].height * 0.05f;
+        boundRect[i].width *= 0.9;
+        boundRect[i].height *= 0.9;
 
         rois.push_back(imageBinary(boundRect[i]).clone());
 
@@ -286,26 +275,35 @@ int main(int argc, char** argv )
 
 
     tesseract::TessBaseAPI *api = new tesseract::TessBaseAPI();
-    api->SetVariable("tessedit_char_whitelist", "0123456789");
-    std::ofstream ofs("data.csv");
+    if (api->Init(nullptr, "eng")) {
+        fprintf(stderr, "Could not initialize tesseract.\n");
+        exit(1);
+    }
+    // api->SetVariable("tessedit_char_whitelist", "0123456789");
+
+    std::vector<int> result;
+    result.reserve(rois.size());
 
     for(size_t i = 0; i < rois.size(); ++i) {
         auto img = rois[i];
-        // dilate(img, img, getStructuringElement(cv::MORPH_RECT, cv::Size(7,7)));
-        // erode(img, img,  getStructuringElement(cv::MORPH_RECT, cv::Size(3,3)));
         cv::imwrite("output.jpg", img);
 
+        std::vector<cv::Vec2f> lines;
+        auto threshold = static_cast<int>(std::min(img.rows, img.cols)*0.7);
+        // auto threshold = static_cast<int>(std::min(img.rows, img.cols)*0.9);
+        cv::HoughLines(img, lines, 1, 3.14/180 * 5, threshold);
+        auto imageLines = drawTableLinesOnBlack(img, lines, 3);
+        cv::imwrite("output_line.jpg", imageLines);
+
+        img = img - imageLines;
+        erode(img, img,  getStructuringElement(cv::MORPH_RECT, cv::Size(2,2)));
+        dilate(img, img, getStructuringElement(cv::MORPH_RECT, cv::Size(3,3)));
+        cv::imwrite("output_final.jpg", img);
 
         char *outText;
 
-        // Initialize tesseract-ocr with English, without specifying tessdata path
-        if (api->Init(NULL, "eng")) {
-            fprintf(stderr, "Could not initialize tesseract.\n");
-            exit(1);
-        }
-
         // Open input image with leptonica library
-        Pix *image = pixRead("/Users/uj/gws/read-table-data/build/output.jpg");
+        Pix *image = pixRead("/Users/uj/gws/read-table-data/build/output_final.jpg");
         api->SetImage(image);
         // Get OCR result
         outText = api->GetUTF8Text();
@@ -314,18 +312,26 @@ int main(int argc, char** argv )
         try {
             num = std::stoi(str);
         } catch (std::exception e) { }
-        ofs << num << ',';
-        printf("OCR output:\n%s", outText);
+        result.push_back(num);
+        printf("OCR output i: %zu\n", i);
+        printf("OCR output num: %d\n", num);
+        printf("OCR output txt: %s\n", outText);
 
         delete [] outText;
         pixDestroy(&image);
 
         cv::imshow("roi", img);
-        cv::waitKey();
+        // cv::waitKey();
     }
 
     api->End();
 
+    std::reverse(result.begin(), result.end());
+
+    std::ofstream ofs("data.csv");
+    for (auto num : result) {
+        ofs << num << ',';
+    }
 
 
     // cv::namedWindow("Display Image", cv::WINDOW_AUTOSIZE );
