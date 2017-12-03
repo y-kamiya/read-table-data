@@ -242,7 +242,7 @@ int getNumberFromCell(Cell &cell, tesseract::TessBaseAPI *api) {
     return num;
 }
 
-cv::Mat modifyAngle(cv::Mat &imageResized, cv::Mat &image) {
+cv::Mat modifyAngle(cv::Mat &image) {
     auto edges = displayLinesByCanny(image);
 
     std::vector<cv::Vec2f> lines;
@@ -266,12 +266,9 @@ cv::Mat modifyAngle(cv::Mat &imageResized, cv::Mat &image) {
 
     auto center = cv::Point(image.cols / 2, image.rows / 2);
     auto mat = cv::getRotationMatrix2D(center, averageDegree - 90.0f, 1.0f);
-    auto imgDst = imageResized.clone();
-    imgDst.setTo(cv::Scalar(255,255,255));
-    cv::warpAffine(imageResized, imgDst, mat, image.size(), CV_INTER_LINEAR, cv::BORDER_TRANSPARENT);
+    cv::Mat imgDst;
+    cv::warpAffine(image, imgDst, mat, image.size());
 
-    // auto imageMask = drawTableLinesOnBlack(image, lines);
-    // cv::imshow("aaaaaaaaaa", imageResized);
     // cv::imshow("bbbbbbbb", imgDst);
     // cv::waitKey();
 
@@ -307,7 +304,7 @@ int main(int argc, char** argv )
     cv::Mat imageBinary;
     cv::adaptiveThreshold(~image, imageBinary, 255, CV_ADAPTIVE_THRESH_GAUSSIAN_C, cv::THRESH_BINARY, 15, -10);
 
-    // auto modifiedImage = modifyAngle(imageResized, imageBinary);
+    imageBinary = modifyAngle(imageBinary);
     // cv::imshow("modifiedImage", modifiedImage);
     // cv::waitKey(0);
     // return 0;
@@ -325,7 +322,7 @@ int main(int argc, char** argv )
     auto tableLines = extractTableLines(lines, THRESHOLD_SAME_LINE_RHO, THRESHOLD_SAME_LINE_RADIAN);
     // auto tableLines = lines;
 
-    auto imageMask = drawTableLinesOnBlack(image, tableLines);
+    auto imageMask = drawTableLinesOnBlack(imageBinary, tableLines);
     cv::imshow("imageMask", imageMask);
     // cv::waitKey(0);
 
@@ -363,6 +360,7 @@ int main(int argc, char** argv )
     // imshow("edges", edges);
     imshow("binary", imageBinary);
     imshow("imageMask", imageMask);
+    cv::waitKey();
 
 
     std::vector<std::vector<cv::Point> > contours_poly( contours.size() );
