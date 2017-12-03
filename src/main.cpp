@@ -46,7 +46,6 @@ cv::Mat getHorizontalMask(cv::Mat &imageBinary) {
 
 cv::Mat displayLinesByCanny(cv::Mat &image) {
     cv::Mat edges;
-    std::vector<cv::Vec2f> lines;
     cv::Canny(image, edges, 100, 300);
 
     auto kernel = getStructuringElement(cv::MORPH_RECT, cv::Size(3,3));
@@ -75,10 +74,17 @@ struct AverageBuilder {
 
 };
 
-bool isTableLine(float theta) {
+bool isLineHorizontal(float theta) {
+    return M_PI / 2 - THRESHOLD_SAME_LINE_RADIAN <= theta && theta <= M_PI / 2 + THRESHOLD_SAME_LINE_RADIAN;
+}
+
+bool isLineVertical(float theta) {
     return theta <= THRESHOLD_SAME_LINE_RADIAN
-        || (M_PI / 2 - THRESHOLD_SAME_LINE_RADIAN <= theta && theta <= M_PI / 2 + THRESHOLD_SAME_LINE_RADIAN)
         || M_PI - THRESHOLD_SAME_LINE_RADIAN < theta;
+}
+
+bool isTableLine(float theta) {
+    return isLineHorizontal(theta) || isLineVertical(theta);
 }
 
 float translateTheta(float theta) {
@@ -236,6 +242,48 @@ int getNumberFromCell(Cell &cell, tesseract::TessBaseAPI *api) {
     return num;
 }
 
+cv::Mat modifyAngle(cv::Mat &imageResized, cv::Mat &image) {
+    auto edges = displayLinesByCanny(image);
+
+    std::vector<cv::Vec2f> lines;
+    cv::HoughLines(edges, lines, 1, 3.14/180, 300);
+    float angle = 0.0f;
+    int count = 0;
+    for (auto &line : lines) {
+        auto theta = line[1];
+        if (isLineHorizontal(theta)) {
+            printf("angle: %f\n", theta);
+            ++count;
+            angle += theta;
+        }
+    }
+
+    auto averageDegree = 0.0f;
+    if (count != 0) {
+        averageDegree = angle / count * 180 / M_PI;
+        printf("average angle: %f\n", averageDegree);
+    }
+
+    auto center = cv::Point(image.cols / 2, image.rows / 2);
+    auto mat = cv::getRotationMatrix2D(center, averageDegree - 90.0f, 1.0f);
+    auto imgDst = imageResized.clone();
+    imgDst.setTo(cv::Scalar(255,255,255));
+    cv::warpAffine(imageResized, imgDst, mat, image.size(), CV_INTER_LINEAR, cv::BORDER_TRANSPARENT);
+
+    // auto imageMask = drawTableLinesOnBlack(image, lines);
+    // cv::imshow("aaaaaaaaaa", imageResized);
+    // cv::imshow("bbbbbbbb", imgDst);
+    // cv::waitKey();
+
+    // std::vector<cv::Vec4i> lines;
+    // cv::HoughLinesP(edges, lines, 1, 3.14/180, 100, imageResized.cols / 5, 20);
+    // for( size_t i = 0; i < lines.size(); i++ ) {
+    //     line( imageResized, cv::Point(lines[i][0], lines[i][1]), cv::Point(lines[i][2], lines[i][3]), cv::Scalar(0,0,255), 3, 8 );
+    // }
+
+    return imgDst;
+}
+
 int main(int argc, char** argv )
 {
     if ( argc != 2 )
@@ -259,9 +307,10 @@ int main(int argc, char** argv )
     cv::Mat imageBinary;
     cv::adaptiveThreshold(~image, imageBinary, 255, CV_ADAPTIVE_THRESH_GAUSSIAN_C, cv::THRESH_BINARY, 15, -10);
 
-    // auto kernel1 = getStructuringElement(cv::MORPH_RECT, cv::Size(2,2));
-    // dilate(imageBinary, imageBinary, kernel1);
-    // erode(imageBinary, imageBinary, kernel1 );
+    // auto modifiedImage = modifyAngle(imageResized, imageBinary);
+    // cv::imshow("modifiedImage", modifiedImage);
+    // cv::waitKey(0);
+    // return 0;
 
     auto horizontal = getHorizontalMask(imageBinary);
     auto vertical = getVerticalMask(imageBinary);
