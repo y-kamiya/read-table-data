@@ -7,8 +7,8 @@ int SCALE_FOR_MASK = 20;
 int THRESHOLD_SAME_ROW = 50;
 
 float CELL_SIZE = 8000.0f;
-float RATIO_CELL_SIZE = 0.9f;
-float THRESHOLD_SAME_LINE_RADIAN = 0.1f;
+float RATIO_CELL_SIZE = 1.0f;
+float THRESHOLD_SAME_LINE_RADIAN = 0.01f;
 float THRESHOLD_SAME_LINE_RHO = 25.0f;
 float RATIO_IMAGE_SIZE = 0.4f;
 float RADIAN_PER_DEGREE = M_PI / 180.0f;
@@ -284,13 +284,14 @@ cv::Mat modifyAngle(cv::Mat &image) {
 
 int main(int argc, char** argv )
 {
-    if ( argc != 2 )
+    if ( argc != 3 )
     {
         printf("usage: DisplayImage.out <Image_Path>\n");
         return -1;
     }
 
     auto imageName = argv[1];
+    auto configCellSize = atof(argv[2]); 
     auto imageIn = cv::imread(imageName, 1);
 
     cv::Mat image, imageResized;
@@ -375,7 +376,7 @@ int main(int argc, char** argv )
 
         printf("%lf\n", area);
         // if(area < 1000 || 3000 < area) {
-        if(area < CELL_SIZE * 0.8f || CELL_SIZE * 1.2f < area) {
+        if(area < configCellSize * 0.8f || configCellSize * 1.2f < area) {
             continue;
         }
 
