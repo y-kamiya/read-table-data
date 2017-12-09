@@ -11,6 +11,7 @@ float RATIO_CELL_SIZE = 0.9f;
 float THRESHOLD_SAME_LINE_RADIAN = 0.1f;
 float THRESHOLD_SAME_LINE_RHO = 25.0f;
 float RATIO_IMAGE_SIZE = 0.4f;
+float RADIAN_PER_DEGREE = M_PI / 180.0f;
 
 cv::Mat getVerticalMask(cv::Mat &imageBinary) {
     auto vertical = imageBinary.clone();
@@ -209,7 +210,7 @@ int getNumberFromCell(Cell &cell, tesseract::TessBaseAPI *api) {
     std::vector<cv::Vec2f> lines;
     auto threshold = static_cast<int>(std::min(img.rows, img.cols)*0.7f);
     // auto threshold = static_cast<int>(std::min(img.rows, img.cols)*0.9);
-    cv::HoughLines(img, lines, 1, 3.14/180 * 5, threshold);
+    cv::HoughLines(img, lines, 1, RADIAN_PER_DEGREE * 5, threshold);
     auto imageLines = drawTableLinesOnBlack(img, lines, 3);
     cv::imwrite("output_line.jpg", imageLines);
 
@@ -246,7 +247,7 @@ cv::Mat modifyAngle(cv::Mat &image) {
     auto edges = displayLinesByCanny(image);
 
     std::vector<cv::Vec2f> lines;
-    cv::HoughLines(edges, lines, 1, 3.14/180, 300);
+    cv::HoughLines(edges, lines, 1, RADIAN_PER_DEGREE/10, 300);
     float angle = 0.0f;
     int count = 0;
     for (auto &line : lines) {
@@ -273,7 +274,7 @@ cv::Mat modifyAngle(cv::Mat &image) {
     // cv::waitKey();
 
     // std::vector<cv::Vec4i> lines;
-    // cv::HoughLinesP(edges, lines, 1, 3.14/180, 100, imageResized.cols / 5, 20);
+    // cv::HoughLinesP(edges, lines, 1, RADIAN_PER_DEGREE, 100, imageResized.cols / 5, 20);
     // for( size_t i = 0; i < lines.size(); i++ ) {
     //     line( imageResized, cv::Point(lines[i][0], lines[i][1]), cv::Point(lines[i][2], lines[i][3]), cv::Scalar(0,0,255), 3, 8 );
     // }
@@ -305,7 +306,7 @@ int main(int argc, char** argv )
     cv::adaptiveThreshold(~image, imageBinary, 255, CV_ADAPTIVE_THRESH_GAUSSIAN_C, cv::THRESH_BINARY, 15, -10);
 
     imageBinary = modifyAngle(imageBinary);
-    // cv::imshow("modifiedImage", modifiedImage);
+    // cv::imshow("modifiedImage", imageBinary );
     // cv::waitKey(0);
     // return 0;
 
@@ -314,16 +315,17 @@ int main(int argc, char** argv )
 
     cv::Mat mask = horizontal + vertical;
     std::vector<cv::Vec2f> lines;
-    cv::HoughLines(mask, lines, 1, 3.14/180 * 5, 100);
+    cv::HoughLines(mask, lines, 1, RADIAN_PER_DEGREE * 5, 200);
 
     cv::imshow("mask", mask);
     // cv::waitKey(0);
     // return 0;
     auto tableLines = extractTableLines(lines, THRESHOLD_SAME_LINE_RHO, THRESHOLD_SAME_LINE_RADIAN);
-    // auto tableLines = lines;
+    // tableLines = lines;
 
     auto imageMask = drawTableLinesOnBlack(imageBinary, tableLines);
-    cv::imshow("imageMask", imageMask);
+    // cv::imshow("imageMask", imageMask);
+    // cv::imshow("binary", imageBinary);
     // cv::waitKey(0);
 
 
@@ -358,9 +360,9 @@ int main(int argc, char** argv )
     // edges = edges - imageMask;
     // imageBinary = imageBinary - imageMask;
     // imshow("edges", edges);
-    imshow("binary", imageBinary);
-    imshow("imageMask", imageMask);
-    cv::waitKey();
+    // imshow("binary", imageBinary);
+    // imshow("imageMask", imageMask);
+    // cv::waitKey();
 
 
     std::vector<std::vector<cv::Point> > contours_poly( contours.size() );
