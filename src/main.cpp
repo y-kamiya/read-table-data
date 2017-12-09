@@ -401,10 +401,15 @@ int main(int argc, char** argv )
         Cell cell(rect.x, rect.y, imageBinary(rect).clone());
         rois.push_back(std::move(cell));
 
+        cv::rectangle(imageResized, cv::Point(rect.x, rect.y), cv::Point(rect.x+rect.width, rect.y+rect.height), cv::Scalar(0,0,255), 3);
+
 //        drawContours( image, contours, i, Scalar(0, 0, 255), CV_FILLED, 8, std::vector<Vec4i>(), 0, Point() );
         // rectangle( imageResized, rect.tl(), rect.br(), cv::Scalar(0, 255, 0), 1, 8, 0 );
     }
 
+
+    cv::imshow("image", imageResized);
+    cv::waitKey();
 
     tesseract::TessBaseAPI *api = new tesseract::TessBaseAPI();
     if (api->Init(nullptr, "eng")) {
