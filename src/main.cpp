@@ -75,17 +75,16 @@ struct AverageBuilder {
 
 };
 
-bool isLineHorizontal(float theta) {
-    return M_PI / 2 - THRESHOLD_SAME_LINE_RADIAN <= theta && theta <= M_PI / 2 + THRESHOLD_SAME_LINE_RADIAN;
+bool isLineHorizontal(float theta, float dTheta = THRESHOLD_SAME_LINE_RADIAN) {
+    return M_PI / 2 - dTheta <= theta && theta <= M_PI / 2 + dTheta;
 }
 
-bool isLineVertical(float theta) {
-    return theta <= THRESHOLD_SAME_LINE_RADIAN
-        || M_PI - THRESHOLD_SAME_LINE_RADIAN < theta;
+bool isLineVertical(float theta, float dTheta = THRESHOLD_SAME_LINE_RADIAN) {
+    return theta <= dTheta || M_PI - dTheta < theta;
 }
 
-bool isTableLine(float theta) {
-    return isLineHorizontal(theta) || isLineVertical(theta);
+bool isTableLine(float theta, float dTheta = THRESHOLD_SAME_LINE_RADIAN) {
+    return isLineHorizontal(theta, dTheta) || isLineVertical(theta, dTheta);
 }
 
 float translateTheta(float theta) {
@@ -144,7 +143,7 @@ std::vector<cv::Vec2f> extractTableLines(std::vector<cv::Vec2f> &lines, float dR
     return ret;
 }
 
-cv::Mat drawTableLinesOnBlack(cv::Mat &image, std::vector<cv::Vec2f> &lines, int thickness = 1) {
+cv::Mat drawTableLinesOnBlack(cv::Mat &image, std::vector<cv::Vec2f> &lines, float dTheta, int thickness = 1) {
     auto img = image.clone();
     img.setTo(cv::Scalar(0,0,0));
 
@@ -157,7 +156,7 @@ cv::Mat drawTableLinesOnBlack(cv::Mat &image, std::vector<cv::Vec2f> &lines, int
         auto st = sin(theta);
         auto start = cv::Point(rho * ct - z * st, rho * st + z * ct);
         auto end   = cv::Point(rho * ct + z * st, rho * st - z * ct);
-        if (isTableLine(theta)) {
+        if (isTableLine(theta, dTheta)) {
             cv::line(img, start, end, cv::Scalar(255,255,255), thickness);
         }
     }
@@ -324,7 +323,7 @@ int main(int argc, char** argv )
     auto tableLines = extractTableLines(lines, THRESHOLD_SAME_LINE_RHO, THRESHOLD_SAME_LINE_RADIAN);
     // tableLines = lines;
 
-    auto imageMask = drawTableLinesOnBlack(imageBinary, tableLines);
+    auto imageMask = drawTableLinesOnBlack(imageBinary, tableLines, THRESHOLD_SAME_LINE_RADIAN);
     // cv::imshow("imageMask", imageMask);
     // cv::imshow("binary", imageBinary);
     // cv::waitKey(0);
