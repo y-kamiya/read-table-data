@@ -10,7 +10,7 @@ float CELL_SIZE = 8000.0f;
 float RATIO_CELL_SIZE = 1.0f;
 float THRESHOLD_SAME_LINE_RADIAN = 0.01f;
 float THRESHOLD_SAME_LINE_RHO = 25.0f;
-float RATIO_IMAGE_SIZE = 0.4f;
+float RATIO_IMAGE_SIZE = 0.5f;
 float RADIAN_PER_DEGREE = M_PI / 180.0f;
 
 cv::Mat getVerticalMask(cv::Mat &imageBinary) {
@@ -206,7 +206,7 @@ int getNumberFromCell(Cell &cell, tesseract::TessBaseAPI *api) {
     auto img = cell.data;
 
     erode(img, img,  getStructuringElement(cv::MORPH_RECT, cv::Size(2,2)));
-    dilate(img, img, getStructuringElement(cv::MORPH_RECT, cv::Size(3,3)));
+    dilate(img, img, getStructuringElement(cv::MORPH_RECT, cv::Size(2,2)));
     cv::imwrite("output.jpg", img);
 
     std::vector<cv::Vec2f> lines;
