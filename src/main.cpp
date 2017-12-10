@@ -204,18 +204,19 @@ std::vector<std::vector<Cell>> sortCells(std::vector<Cell> &cells) {
 
 int getNumberFromCell(Cell &cell, tesseract::TessBaseAPI *api) {
     auto img = cell.data;
+
+    erode(img, img,  getStructuringElement(cv::MORPH_RECT, cv::Size(2,2)));
+    dilate(img, img, getStructuringElement(cv::MORPH_RECT, cv::Size(3,3)));
     cv::imwrite("output.jpg", img);
 
     std::vector<cv::Vec2f> lines;
     auto threshold = static_cast<int>(std::min(img.rows, img.cols)*0.7f);
-    // auto threshold = static_cast<int>(std::min(img.rows, img.cols)*0.9);
-    cv::HoughLines(img, lines, 1, RADIAN_PER_DEGREE * 5, threshold);
-    auto imageLines = drawTableLinesOnBlack(img, lines, 3);
+    cv::HoughLines(img, lines, 1, RADIAN_PER_DEGREE, threshold);
+
+    auto imageLines = drawTableLinesOnBlack(img, lines, 0.1f, 3);
     cv::imwrite("output_line.jpg", imageLines);
 
     img = img - imageLines;
-    erode(img, img,  getStructuringElement(cv::MORPH_RECT, cv::Size(2,2)));
-    dilate(img, img, getStructuringElement(cv::MORPH_RECT, cv::Size(3,3)));
     cv::imwrite("output_final.jpg", img);
 
     char *outText;
