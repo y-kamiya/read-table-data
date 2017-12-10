@@ -284,14 +284,13 @@ cv::Mat modifyAngle(cv::Mat &image) {
 
 int main(int argc, char** argv )
 {
-    if ( argc != 3 )
+    if ( argc != 2 )
     {
         printf("usage: DisplayImage.out <Image_Path>\n");
         return -1;
     }
 
     auto imageName = argv[1];
-    auto configCellSize = atof(argv[2]); 
     auto imageIn = cv::imread(imageName, 1);
 
     cv::Mat image, imageResized;
@@ -375,8 +374,7 @@ int main(int argc, char** argv )
         double area = contourArea(contours[i]);
 
         printf("%lf\n", area);
-        // if(area < 1000 || 3000 < area) {
-        if(area < configCellSize * 0.8f || configCellSize * 1.2f < area) {
+        if(50000< area) {
             continue;
         }
 
