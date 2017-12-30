@@ -5,6 +5,7 @@
 
 int SCALE_FOR_MASK = 20;
 int THRESHOLD_SAME_ROW = 50;
+int LENGTH_FOR_ANGLE_MODIFICATION = 500;
 
 float CELL_SIZE = 8000.0f;
 float RATIO_CELL_SIZE = 1.0f;
@@ -244,10 +245,14 @@ int getNumberFromCell(Cell &cell, tesseract::TessBaseAPI *api) {
 }
 
 cv::Mat modifyAngle(cv::Mat &image) {
-    auto edges = displayLinesByCanny(image);
+    cv::Mat imageBinary;
+    cv::cvtColor(image, imageBinary, CV_BGR2GRAY);
+    cv::adaptiveThreshold(~imageBinary, imageBinary, 255, CV_ADAPTIVE_THRESH_GAUSSIAN_C, cv::THRESH_BINARY, 15, -10);
+
+    auto edges = displayLinesByCanny(imageBinary);
 
     std::vector<cv::Vec2f> lines;
-    cv::HoughLines(edges, lines, 1, RADIAN_PER_DEGREE/10, 300);
+    cv::HoughLines(edges, lines, 1, RADIAN_PER_DEGREE/10, LENGTH_FOR_ANGLE_MODIFICATION);
     float angle = 0.0f;
     int count = 0;
     for (auto &line : lines) {
@@ -265,7 +270,7 @@ cv::Mat modifyAngle(cv::Mat &image) {
         printf("average angle: %f\n", averageDegree);
     }
 
-    auto center = cv::Point(image.cols / 2, image.rows / 2);
+    auto center = cv::Point(imageBinary.cols / 2, imageBinary.rows / 2);
     auto mat = cv::getRotationMatrix2D(center, averageDegree - 90.0f, 1.0f);
     cv::Mat imgDst;
     cv::warpAffine(image, imgDst, mat, image.size());
@@ -293,22 +298,20 @@ int main(int argc, char** argv )
     auto imageName = argv[1];
     auto imageIn = cv::imread(imageName, 1);
 
-    cv::Mat image, imageResized;
+    cv::Mat imageGray, imageResized;
     cv::Size size(imageIn.size().width * RATIO_IMAGE_SIZE, imageIn.size().height * RATIO_IMAGE_SIZE);
     cv::resize(imageIn, imageResized, size);
-    cv::cvtColor(imageResized, image, CV_BGR2GRAY);
-    if ( !image.data )
+
+    cv::imshow("before angle", imageResized);
+    imageResized = modifyAngle(imageResized);
+    cv::cvtColor(imageResized, imageGray, CV_BGR2GRAY);
+    if ( !imageGray.data )
     {
         printf("No image data \n");
         return -1;
     }
     cv::Mat imageBinary;
-    cv::adaptiveThreshold(~image, imageBinary, 255, CV_ADAPTIVE_THRESH_GAUSSIAN_C, cv::THRESH_BINARY, 15, -10);
-
-    imageBinary = modifyAngle(imageBinary);
-    // cv::imshow("modifiedImage", imageBinary );
-    // cv::waitKey(0);
-    // return 0;
+    cv::adaptiveThreshold(~imageGray, imageBinary, 255, CV_ADAPTIVE_THRESH_GAUSSIAN_C, cv::THRESH_BINARY, 15, -10);
 
     auto horizontal = getHorizontalMask(imageBinary);
     auto vertical = getVerticalMask(imageBinary);
