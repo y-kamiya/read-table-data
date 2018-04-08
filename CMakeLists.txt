@@ -12,5 +12,7 @@ include_directories( ${OpenCV_INCLUDE_DIRS} )
 
 set( CMAKE_CXX_FLAGS "-Wall --std=c++1z" )
 
-add_executable( readTableImage src/main.cpp )
+file(GLOB sourcefiles src/*.cpp)
+add_executable( readTableImage ${sourcefiles} )
+
 target_link_libraries( readTableImage ${OpenCV_LIBS} )
